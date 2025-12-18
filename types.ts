@@ -1,10 +1,11 @@
 
 export interface StoryScene {
-  storyText: string; // The Thai text for narration
-  englishTranslation?: string; // English translation for subtitles
-  imagePrompt: string; // The prompt for the image generator
+  storyText: string;
+  englishTranslation?: string;
+  imagePrompt: string;
   sceneNumber: number;
-  visualEffect?: 'none' | 'rain' | 'storm' | 'snow' | 'fire' | 'fog' | 'sparkles';
+  speaker?: string; // เช่น 'Narrator', 'Character1', 'Character2'
+  visualEffect?: 'none' | 'rain' | 'storm' | 'snow' | 'fire' | 'fog' | 'sparkles' | 'dust';
   soundEffect?: 'none' | 'rain' | 'thunder' | 'forest' | 'city' | 'fire' | 'magic';
 }
 
@@ -20,26 +21,30 @@ export interface StoryConfig {
   bgmEnabled: boolean;
   defaultShowSubtitles: boolean;
   defaultSubtitleLang: SubtitleLang;
+  customLogoUrl?: string | null;
 }
 
 export interface StoryData {
-  id: string; // Unique ID for history
-  createdAt: number; // Timestamp
+  id: string;
+  createdAt: number;
   title: string;
-  seoSummary: string; // Short catchy summary for SEO description
-  tags: string[]; // Hashtags for social media
-  characterDescription: string; // Visual description to enforce consistency
-  mood: string; // "Happy", "Sad", "Exciting", "Scary", "Calm"
-  mode: StoryMode; // 'short', 'medium' or 'long'
+  thumbnailText: string; 
+  thumbnailUrl?: string; 
+  seoSummary: string;
+  tags: string[];
+  characterDescription: string;
+  mood: 'Horror' | 'Adventure' | 'Emotional' | 'Funny' | 'Mystery';
+  mode: StoryMode;
   scenes: StoryScene[];
   config?: StoryConfig;
+  status?: 'draft' | 'rendering' | 'completed' | 'failed';
 }
 
 export interface GeneratedSceneMedia {
   imageUrl: string;
   audioBuffer: AudioBuffer | null;
   text: string;
-  textEn?: string; // Store English text if available
+  textEn?: string;
   visualEffect?: string;
   soundEffect?: string;
 }
@@ -55,4 +60,21 @@ export enum AppState {
   GENERATING_MEDIA = 'GENERATING_MEDIA',
   READY = 'READY',
   ERROR = 'ERROR',
+}
+
+export interface YTChannel {
+  id: string;
+  name: string;
+  accessToken: string;
+  profileImg?: string;
+}
+
+export interface AutomationSettings {
+  isEnabled: boolean;
+  dailyCount: number;
+  lastPostDate?: string;
+  postTimes: string[];
+  preferredMode: StoryMode;
+  targetChannelId?: string;
+  lastRunTimestamp?: number; 
 }

@@ -2,207 +2,117 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { StoryData, StoryMode, VoiceGender, VoiceTone } from "../types";
 
-// Initialize Gemini Client
 const getClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please set it in the environment variables.");
-  }
+  if (!apiKey) throw new Error("API Key is missing.");
   return new GoogleGenAI({ apiKey });
 };
 
-// Voice Mapping Logic
 export const mapVoiceConfig = (gender: VoiceGender, tone: VoiceTone): string => {
   if (gender === 'female') {
-    // Female voices: Kore (Soft), Zephyr (Energetic/Standard)
     if (tone === 'energetic' || tone === 'formal') return 'Zephyr';
-    return 'Kore'; // Default Soft/Deep(Fallback)
+    return 'Kore';
   } else {
-    // Male voices: Puck (Soft/Formal), Charon (Deep), Fenrir (Energetic)
     if (tone === 'deep') return 'Charon';
     if (tone === 'energetic') return 'Fenrir';
-    return 'Puck'; // Default Soft/Formal
+    return 'Puck';
   }
 };
 
-// 1. Generate Story Script (Unified for Short/Medium)
+export const generateAITopic = async (): Promise<string> => {
+    const ai = getClient();
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: "Suggest a high-retention viral video topic in Thai. Mix between: 1) Amazing/Cute animal facts, 2) Success & Wealth psychology tips, 3) Mind-blowing real-world secrets. Only return the topic name in Thai."
+    });
+    return response.text.trim() || "ความลับของความสำเร็จที่โรงเรียนไม่เคยสอน";
+};
+
 export const generateStoryScript = async (topic: string, mode: StoryMode = 'short'): Promise<StoryData> => {
   const ai = getClient();
+  const sceneCount = mode === 'medium' ? 8 : 6;
   
-  let durationPrompt = "";
-  let sceneCount = 6;
-  
-  if (mode === 'medium') {
-    durationPrompt = "Total video length should be approx 60-75 seconds. Create exactly 8 scenes.";
-    sceneCount = 8;
-  } else {
-    durationPrompt = "Total video length should be approx 40-50 seconds. Create exactly 6 scenes.";
-    sceneCount = 6;
-  }
-
-  const prompt = `
-    Create a viral short story in Thai for YouTube Shorts/TikTok about: "${topic}".
+  const prompt = `Create an ULTRA-VIRAL story script in Thai about: "${topic}".
+    TARGET: Clean, high-end professional vertical video (40-50s).
+    SCENE COUNT: Exactly ${sceneCount} scenes.
     
-    Requirements:
-    1. **Duration:** ${durationPrompt}
-    2. **Structure:** The story MUST be complete with a clear beginning, middle, and a satisfying ending/conclusion within exactly ${sceneCount} scenes. 
-    3. **Visual Style:** Define a "Photorealistic, Cinematic, 8K resolution, Pixar-style 3D render but realistic lighting" style. 
-    4. **Character:** Define a main character with consistent features (e.g., "A cute little girl with a red hoodie and big brown eyes").
-    5. **Audio/Mood:** Analyze the story's overall sentiment. Is it Happy, Sad, Exciting, Scary, or Calm?
-    6. **Language:** The 'storyText' MUST be in Thai. You MUST also provide an 'englishTranslation' for subtitles.
-    7. **FX Analysis:** For each scene, choose a 'visualEffect' (rain, storm, snow, fire, fog, sparkles, none) and a 'soundEffect' (rain, thunder, forest, city, fire, magic, none) that matches the context.
-    8. **SEO:**
-       - Generate a "Clickbait" style Title in Thai.
-       - Generate a compelling Description for YouTube Shorts (Thai).
-       - Generate 10 trending Hashtags (Thai & English mixed).
-    9. **Scenes:**
-       - Create exactly ${sceneCount} scenes.
-       - 'storyText': Thai narration (keep it concise, ~8-10 seconds reading time per scene).
-       - 'englishTranslation': Accurate English translation of the storyText.
-       - 'imagePrompt': Detailed English prompt. START with: "Photorealistic, 8k, cinematic lighting...". Include the character description in every single prompt to ensure consistency.
+    CRITICAL RULES FOR MINIMALISM & FLOW:
+    1. TEXT LIMIT: Each scene storyText must be VERY SHORT and IMPACTFUL (Max 10-12 words).
+    2. CHUNKING: Use '|' to separate segments that should appear one by one. Example: "รู้หรือไม่ | ว่านกฮูก | มีหูที่ไม่เท่ากัน"
+    3. CONSISTENCY: Maintain a stable, professional narrative tone.
+    4. HOOK: Scene 1 must be an immediate scroll-stopper.
+    5. DIALOGUE: Use 'Narrator: ' for narration.
     
-    Output JSON format.
-  `;
+    Output RAW JSON ONLY:
+    {
+      "title": "Viral Thai Title",
+      "thumbnailText": "3-4 POWER WORDS",
+      "characterDescription": "Visual consistency details for AI",
+      "seoSummary": "Catchy description",
+      "tags": ["#สาระ", "#ความรู้", "#สัตว์โลก", "#จิตวิทยา"],
+      "mood": "Adventure|Emotional|Funny|Mystery",
+      "scenes": [
+        {
+          "sceneNumber": 1,
+          "storyText": "Narrator: ส่วนแรก | ส่วนที่สอง | ส่วนสุดท้าย.",
+          "speaker": "Narrator",
+          "imagePrompt": "9:16 Cinematic photorealistic description",
+          "visualEffect": "none"
+        }
+      ]
+    }`;
 
-  return await fetchStoryFromGemini(ai, prompt, mode);
-};
-
-// 1.5 Generate Long Story Script (Podcast/Audiobook Mode)
-export const generateLongStoryScript = async (topic: string, mode: 'long' | 'mega_long' = 'long'): Promise<StoryData> => {
-  const ai = getClient();
-
-  let lengthInstruction = "";
-  let chapterCount = 4;
-  let wordCountInstruction = "";
-
-  if (mode === 'mega_long') {
-    // 30 Min approx target (Simulated via very long chapters and more scenes)
-    // Note: True 30 mins is hard with single prompt limits, we maximize content here.
-    lengthInstruction = "Target Duration: 30 Minutes Audiobook Style.";
-    chapterCount = 12; // Increased scenes
-    wordCountInstruction = "EXTREMELY LONG. Each chapter must be 300-400 words. It should take 2-3 minutes to read each scene.";
-  } else {
-    // 3-5 Min Podcast
-    lengthInstruction = "Target Duration: 3-5 Minutes Podcast Style.";
-    chapterCount = 4;
-    wordCountInstruction = "Long and detailed. Each chapter must be 100-150 words. It should take 45-60 seconds to read each scene.";
-  }
-
-  const prompt = `
-    Create a detailed, immersive "Audiobook" style story in Thai about: "${topic}".
-    
-    Requirements:
-    1. **Format:** This is a Long Form story. ${lengthInstruction} Focus on deep narration, beautiful language, and immersive storytelling.
-    2. **Structure:** Divide the story into exactly ${chapterCount} Chapters (Scenes).
-    3. **Length:** ${wordCountInstruction}
-    4. **Visuals:** Create distinct image prompts for each chapter.
-    5. **Character:** Define a main character with consistent features.
-    6. **Language:** The 'storyText' MUST be in Thai. You MUST also provide an 'englishTranslation' for subtitles.
-    7. **FX Analysis:** Choose 'visualEffect' (rain, storm, snow, fire, fog, sparkles, none) and 'soundEffect' (rain, thunder, forest, city, fire, magic, none).
-    8. **Mood:** Analyze the sentiment.
-    9. **SEO:** Title, Description, Hashtags.
-    
-    Output JSON format with properties: title, seoSummary, tags, characterDescription, mood, scenes (array of {sceneNumber, storyText, englishTranslation, imagePrompt, visualEffect, soundEffect}).
-  `;
-
-  return await fetchStoryFromGemini(ai, prompt, mode);
-};
-
-// Helper to call Gemini and parse JSON
-const fetchStoryFromGemini = async (ai: GoogleGenAI, prompt: string, mode: StoryMode): Promise<StoryData> => {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3-flash-preview",
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING, description: "Title in Thai" },
-          seoSummary: { type: Type.STRING, description: "Description" },
-          tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-          characterDescription: { type: Type.STRING },
-          mood: { type: Type.STRING },
-          scenes: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                sceneNumber: { type: Type.INTEGER },
-                storyText: { type: Type.STRING },
-                englishTranslation: { type: Type.STRING },
-                imagePrompt: { type: Type.STRING },
-                visualEffect: { type: Type.STRING, enum: ['none', 'rain', 'storm', 'snow', 'fire', 'fog', 'sparkles'] },
-                soundEffect: { type: Type.STRING, enum: ['none', 'rain', 'thunder', 'forest', 'city', 'fire', 'magic'] },
-              },
-            },
-          },
-        },
-      },
     },
   });
 
-  const jsonText = response.text;
-  if (!jsonText) throw new Error("Failed to generate story script.");
-
-  const data = JSON.parse(jsonText);
-
-  return {
-    id: Date.now().toString(),
-    createdAt: Date.now(),
-    mode: mode,
-    ...data
-  } as StoryData;
-}
-
-// 2. Generate Image for a Scene
-export const generateSceneImage = async (imagePrompt: string): Promise<string> => {
-  const ai = getClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview', // Upgraded to Pro for better quality based on user request for "Realistic"
-    contents: {
-      parts: [{ text: imagePrompt }],
-    },
-    config: {
-      imageConfig: {
-        aspectRatio: "9:16",
-        imageSize: "1K"
-      },
-    },
-  });
-
-  if (response.candidates?.[0]?.content?.parts) {
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData && part.inlineData.data) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
-    }
-  }
+  const text = response.text.replace(/```json|```/g, "").trim();
+  const data = JSON.parse(text);
+  if (data.scenes.length > sceneCount) data.scenes = data.scenes.slice(0, sceneCount);
   
-  throw new Error("Failed to generate image.");
+  return { id: Date.now().toString(), createdAt: Date.now(), mode, ...data };
 };
 
-// 3. Generate Audio for a Scene
-export const generateSceneAudio = async (text: string, voiceName: string = 'Kore'): Promise<string> => {
+export const generateSceneImage = async (imagePrompt: string, characterRef: string = "", isThumbnail: boolean = false): Promise<string> => {
   const ai = getClient();
+  const style = isThumbnail ? "Dramatic extreme close-up, high contrast, viral poster style" : "Cinematic 8k photography, hyper-realistic, soft depth of field";
+  const finalPrompt = `${style}, vertical 9:16 aspect ratio. Character: ${characterRef}. Context: ${imagePrompt}`;
+
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: {
-      parts: [{ text }],
-    },
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: voiceName },
-        },
-      },
-    },
+    model: 'gemini-3-pro-image-preview',
+    contents: { parts: [{ text: finalPrompt }] },
+    config: { imageConfig: { aspectRatio: "9:16", imageSize: "1K" } },
   });
 
-  const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!audioData) {
-    throw new Error("Failed to generate audio.");
+  for (const part of response.candidates[0].content.parts) {
+    if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
   }
-  return audioData;
+  throw new Error("Image generation failed");
+};
+
+export const generateSceneAudio = async (text: string, primaryVoice: string): Promise<string> => {
+  const ai = getClient();
+  const speakerMatch = text.match(/^([^:]+):/);
+  const cleanText = speakerMatch ? text.substring(text.indexOf(":") + 1).replace(/\|/g, ' ').trim() : text.replace(/\|/g, ' ').trim();
+  
+  // เสริมคำสั่งให้รักษาโทนเสียงพากย์ให้นิ่งและต่อเนื่องที่สุด
+  const narrativeInstruction = `บรรยายด้วยน้ำเสียงที่นิ่ง มั่นคง เป็นธรรมชาติ และรักษาโทนอารมณ์เดียวกันตลอดทั้งเรื่อง: ${cleanText}`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-preview-tts",
+    contents: [{ parts: [{ text: narrativeInstruction }] }],
+    config: { 
+      responseModalities: [Modality.AUDIO], 
+      speechConfig: { 
+        voiceConfig: { 
+          prebuiltVoiceConfig: { voiceName: primaryVoice } 
+        } 
+      } 
+    },
+  });
+  return response.candidates[0].content.parts[0].inlineData.data;
 };
